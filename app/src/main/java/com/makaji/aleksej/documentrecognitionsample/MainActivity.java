@@ -1,5 +1,8 @@
 package com.makaji.aleksej.documentrecognitionsample;
 
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -12,14 +15,23 @@ import org.androidannotations.annotations.AfterViews;
 import org.androidannotations.annotations.Bean;
 import org.androidannotations.annotations.Click;
 import org.androidannotations.annotations.EActivity;
+import org.androidannotations.annotations.RootContext;
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
+import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.Scalar;
+
+import java.io.IOException;
+import java.io.InputStream;
 
 import static org.opencv.android.LoaderCallbackInterface.SUCCESS;
 
 @EActivity(R.layout.activity_main)
 public class MainActivity extends AppCompatActivity {
+
+    private static final String DATASET_NAME = "dataset";
 
     @Bean
     DocumentDetector documentDetector;
@@ -59,6 +71,31 @@ public class MainActivity extends AppCompatActivity {
 
     @Click
     void detectAndPrepare() {
-        //documentDetector.nesto();
+
+        //Get image and cover to Mat (simulation what i get from other developer)
+        Mat imageMat = getImageMat();
+
+        documentDetector.detectAndPrepareDocument(imageMat, 210, 40.0f);
+
+    }
+
+    private Mat getImageMat() {
+
+        InputStream inputstream = null;
+
+        try {
+            inputstream = getApplicationContext().getAssets().open(DATASET_NAME + "/" + getApplicationContext().getAssets().list(DATASET_NAME)[0]);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        Bitmap bitmap = BitmapFactory.decodeStream(inputstream);
+
+        // first convert bitmap into OpenCV mat object
+        Mat imageMat = new Mat(bitmap.getHeight(), bitmap.getWidth(), CvType.CV_8U, new Scalar(4));
+        Bitmap myBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
+        Utils.bitmapToMat(myBitmap, imageMat);
+
+        return imageMat;
     }
 }
