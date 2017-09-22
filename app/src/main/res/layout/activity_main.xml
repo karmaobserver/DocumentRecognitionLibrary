@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     tools:context="com.makaji.aleksej.documentrecognitionsample.MainActivity">
 
     <Button
@@ -12,4 +13,22 @@
         android:layout_height="wrap_content"
         android:text="Detect and prepare document" />
 
-</android.support.constraint.ConstraintLayout>
+    <LinearLayout
+        android:id="@+id/images"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/imageThresholdTolerance"
+            android:layout_width="400dp"
+            android:layout_height="500dp" />
+
+        <ImageView
+            android:id="@+id/imageThresholdOTSU"
+            android:layout_width="400dp"
+            android:layout_height="500dp" />
+
+    </LinearLayout>
+
+</LinearLayout>

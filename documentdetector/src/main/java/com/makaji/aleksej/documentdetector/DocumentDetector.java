@@ -4,6 +4,8 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Region;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.util.Log;
 import android.util.TimingLogger;
 
@@ -38,7 +40,7 @@ import static org.opencv.core.Core.countNonZero;
 @EBean
 public class DocumentDetector {
 
-    private static final int PREFERRED_SIZE = 600;
+    private static final int PREFERRED_SIZE = 800;
 
     private static final String TAG = "DocumentDetector";
 
@@ -46,18 +48,26 @@ public class DocumentDetector {
     Context context;
 
     /**
-     * Detect document, if it is a document, prepare it for OCR else make smooth Image.
+     * Detect document, if it is a document, prepare it for OCR otherwise make smooth Image.
      *
      * @param originalMat Mat which should be processed
-     * @return  Mat which is prepared for OCR in case Mat is a document, else MAT as smooth Image.
+     * @param tolerance   Tolerance which will be used as threshold
+     * @param percentage  Percentage which defines how many white pixels needs to be contained in document to be valid document
+     * @param regions     Regions number which defines how many regions needs to be contained in document to be valid document
+     * @return Mat which is prepared for OCR in case Mat is a document, otherwise return MAT as smooth Image.
      */
-    public Mat detectAndPrepareDocument(Mat originalMat, Integer tolerance, Float percentage) {
+    public Mat detectAndPrepareDocument(Mat originalMat, Integer tolerance, Float percentage, Integer regions) {
 
         Mat resultMat;
 
-        if (detectDocument(originalMat, tolerance, percentage)) {
+        //Check if image is document
+        if (detectDocument(originalMat, tolerance, percentage, regions)) {
+
+            //If image is document, prepare document for OCR
             resultMat = prepareDocumentForOCR(originalMat);
         } else {
+
+            //If image is not document, prepare smooth image
             resultMat = prepareSmoothImage(originalMat);
         }
 
@@ -75,7 +85,7 @@ public class DocumentDetector {
      * @param originalMat Mat which should be processed
      * @return True if it is document, else false
      */
-    public boolean detectDocument(Mat originalMat, Integer tolerance, Float percentage) {
+    public boolean detectDocument(Mat originalMat, Integer tolerance, Float percentage, Integer regions) {
 
         boolean isWhite;
 
@@ -95,12 +105,13 @@ public class DocumentDetector {
 
         //check if white pixels are more then 40%
         int pixels = blackPixels + whitePixels;
-        int pixels40percentage = (int) (pixels * (percentage / 100.0f));
+        int pixelsPercentage = (int) (pixels * (percentage / 100.0f));
 
-        if (pixels40percentage < whitePixels) {
+        if (pixelsPercentage < whitePixels) {
             isWhite = true;
+            Log.d(TAG, "There are more then " + percentage + "% white pixels");
         } else {
-            Log.d(TAG, "There are less then 40% white pixels");
+            Log.d(TAG, "There are less then " + percentage + "% white pixels");
             return false;
         }
 
@@ -119,36 +130,41 @@ public class DocumentDetector {
         morphStructure = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(15, 1));
         Imgproc.morphologyEx(thresholdWithMorphMat, morphClosingMat, Imgproc.MORPH_CLOSE, morphStructure);
 
-        //Mat mask = Mat.zeros(thresholdWithMorphMat.size(), CvType.CV_8UC1);
-
-        List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
+        List<MatOfPoint> contours = new ArrayList<>();
 
         Mat hierarchy = new Mat();
 
+        //Find contours
         Imgproc.findContours(morphClosingMat, contours, hierarchy, Imgproc.RETR_CCOMP, Imgproc.CHAIN_APPROX_SIMPLE, new Point(0, 0));
 
-        Log.d(TAG, "Number of Contours: " + contours.size());
+        Log.d(TAG, "Number of Regions: " + contours.size());
 
-       /* //If we want to draw rectangles on image
-        for (int idx = 0; idx < contours.size(); idx++) {
+        //If we want to draw rectangles on image. (If we scaling picture, make sure you draw on correct image)
+        /*if (drawRegions) {
 
-            Rect rect = Imgproc.boundingRect(contours.get(idx));
+            Mat mask = Mat.zeros(thresholdWithMorphMat.size(), CvType.CV_8UC1);
 
-            Mat maskROI = new Mat(mask, rect);
+            for (int idx = 0; idx < contours.size(); idx++) {
 
-            maskROI.setTo(new Scalar(0, 0, 0));
+                Rect rect = Imgproc.boundingRect(contours.get(idx));
 
-            //takes 1-2 ms per contour
-            Imgproc.drawContours(mask, contours, idx, new Scalar(255, 255, 255), Core.FILLED);
+                Mat maskROI = new Mat(mask, rect);
 
-            double r = (double) Core.countNonZero(maskROI) / (rect.width * rect.height);
+                maskROI.setTo(new Scalar(0, 0, 0));
 
-            if (r > .45 && (rect.height > 8 && rect.width > 8)) {
-                Imgproc.rectangle(thresholdMat, rect.br(), new Point(rect.br().x - rect.width, rect.br().y - rect.height), new Scalar(0, 255, 0));
+                //takes 1-2 ms per contour
+                Imgproc.drawContours(mask, contours, idx, new Scalar(255, 255, 255), Core.FILLED);
+
+                double r = (double) Core.countNonZero(maskROI) / (rect.width * rect.height);
+
+                if (r > .45 && (rect.height > 8 && rect.width > 8)) {
+                    Imgproc.rectangle(originalMat, rect.br(), new Point(rect.br().x - rect.width, rect.br().y - rect.height), new Scalar(20, 4, 201));
+                }
             }
         }*/
 
-        if (isWhite && contours.size()>1) {
+        //If there are more white pixels as defined and if there are more contours as defined, return true as valid document
+        if (isWhite && contours.size() > regions) {
             return true;
         } else {
             return false;
@@ -158,7 +174,7 @@ public class DocumentDetector {
     /**
      * Check if the picture should be scaled
      *
-     * @param imageMat
+     * @param imageMat Mat which will be scaled
      */
     private Mat checkImageSize(Mat imageMat) {
 
@@ -167,12 +183,10 @@ public class DocumentDetector {
         if (imageMat.height() > PREFERRED_SIZE || imageMat.width() > PREFERRED_SIZE) {
 
             //it takes less than 20 milliseconds for scaling
-            retVal =  scalePicture(imageMat);
+            retVal = scalePicture(imageMat);
 
         } else {
-
             retVal = imageMat;
-
         }
 
         return retVal;
@@ -180,9 +194,9 @@ public class DocumentDetector {
 
     /**
      * Picture scaling - if at least one picture's dimension is bigger than PREFERRED_SIZE,
-     *                  the picture will be scaled
+     * the picture will be scaled
      *
-     * @param imageMat
+     * @param imageMat Mat which will be scaled
      */
     private Mat scalePicture(Mat imageMat) {
 
@@ -206,28 +220,27 @@ public class DocumentDetector {
 
     }
 
+    /**
+     * Prepare document for OCR.
+     * Convert Mat to gray then do threshold based on OTSU algorithm.
+     *
+     * @param originalMat Original Mat
+     * @return Transformed Mat
+     */
     private Mat prepareDocumentForOCR(Mat originalMat) {
 
         // Convert to gray
         Mat grayMat = new Mat(originalMat.cols(), originalMat.rows(), CvType.CV_8U, new Scalar(1));
         Imgproc.cvtColor(originalMat, grayMat, Imgproc.COLOR_RGB2GRAY, 1);
 
-        //checks image size and scale it if necessary
-        grayMat = checkImageSize(grayMat);
-
-        //Apply Morphological Gradient.
-        Mat morphMat = new Mat(originalMat.cols(), originalMat.rows(), CvType.CV_8U, new Scalar(1));
-        Mat morphStructure = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(3, 3));
-        Imgproc.morphologyEx(grayMat, morphMat, Imgproc.MORPH_GRADIENT, morphStructure);
-
         // Apply threshold to convert to binary image.
         // Using Otsu algorithm to choose the optimal threshold value to convert the processed image to binary image.
         Mat thresholdWithMorphMat = new Mat(originalMat.cols(), originalMat.rows(), CvType.CV_8U, new Scalar(1));
-        Imgproc.threshold(morphMat, thresholdWithMorphMat, 0.0, 255.0, Imgproc.THRESH_BINARY | Imgproc.THRESH_OTSU);
-
-        //Temporary for testing
-        //matToDrawOTSU = thresholdWithMorphMat;
+        Imgproc.threshold(grayMat, thresholdWithMorphMat, 0.0, 255.0, Imgproc.THRESH_BINARY | Imgproc.THRESH_OTSU);
 
         return thresholdWithMorphMat;
     }
+
+
 }
+
